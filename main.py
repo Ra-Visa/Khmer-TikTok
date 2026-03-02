@@ -15,7 +15,7 @@ import sys
 BOT_TOKEN = "8771490616:AAHLguFzc28SvbKZNUDS5_9KscJ_Ko8FRKs"  # Get from @BotFather on Telegram
 RAPIDAPI_KEY = "8e126a962emshf6305bb2fe26993p14eeecjsn3438579f250c"  # Your RapidAPI key
 SHRINKME_API_KEY = "02dd9552b2fb55d6d38f5f3a2f9d4cf46498c404"  # Optional: Get from shrinkme.io
-DOMAIN = "https://your-domain.com"  # Your deployed domain
+DOMAIN = "https://khmer-tiktok.onrender.com"  # Your deployed domain
 PORT = 5000
 
 # Validate bot token format
