@@ -30,8 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==================== TEMPORARY STORAGE ====================
-# Store video data using chat_id as key
-# Structure: {chat_id: {'video_content': bytes, 'video_info': dict, 'timestamp': float}}
+# Store video data using chat_id as key with timestamp
+# Structure: {chat_id: {'video_content': bytes, 'video_info': dict, 'timestamp': float, 'ad_clicked': float}}
 user_video_storage = {}
 
 # Cleanup old entries every hour
@@ -208,9 +208,10 @@ def send_welcome(message):
 
 **📱 របៀបប្រើប្រាស់:**
 1️⃣ ផ្ញើតំណភ្ជាប់ TikTok មកកាន់ bot
-2️⃣ ចុចប៊ូតុង 👁️ **មើលពាណិជ្ជកម្ម (៥ វិនាទី)** 
-3️⃣ បន្ទាប់ពីមើលពាណិជ្ជកម្មរួច ត្រលប់មកវិញហើយចុច ✅ **រួចរាល់ - ទាញយកវីដេអូ**
-4️⃣ Bot នឹងផ្ញើវីដេអូមកអ្នកដោយស្វ័យប្រវត្តិ
+2️⃣ ចុចប៊ូតុង 👁️ **មើលពាណិជ្ជកម្ម (១០ វិនាទី)** 
+3️⃣ រង់ចាំ ១០ វិនាទី
+4️⃣ ចុច ✅ **រួចរាល់ - ទាញយកវីដេអូ**
+5️⃣ Bot នឹងផ្ញើវីដេអូមកអ្នកដោយស្វ័យប្រវត្តិ
 
 **✨ លក្ខណៈពិសេស:**
 • គ្មានស្លាកសញ្ញា TikTok
@@ -269,7 +270,7 @@ def handle_message(message):
         )
         return
     
-    # Store video data using chat_id as key
+    # Store video data using chat_id as key with timestamp
     user_video_storage[chat_id] = {
         'video_content': result['video_content'],
         'video_info': {
@@ -277,10 +278,11 @@ def handle_message(message):
             'author': result['author'],
             'duration': result.get('duration', 0)
         },
-        'timestamp': time.time()
+        'timestamp': time.time(),  # When the video was requested
+        'ad_clicked': None  # Will be set when user clicks ad button (optional)
     }
     
-    logger.info(f"📦 Stored video for chat_id: {chat_id}")
+    logger.info(f"📦 Stored video for chat_id: {chat_id} at timestamp: {user_video_storage[chat_id]['timestamp']}")
     
     # Create inline keyboard with two buttons
     from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
@@ -289,7 +291,7 @@ def handle_message(message):
     
     # Button 1: Adsterra Direct Link (View Ad)
     ad_button = InlineKeyboardButton(
-        text="👁️ មើលពាណិជ្ជកម្ម (៥ វិនាទី)", 
+        text="👁️ មើលពាណិជ្ជកម្ម (១០ វិនាទី)", 
         url=ADSTERRA_LINK
     )
     
@@ -308,8 +310,10 @@ def handle_message(message):
             f"📝 **ចំណងជើង:** {result['description']}\n"
             f"👤 **អ្នកបង្ហោះ:** {result['author']}\n\n"
             f"**ដើម្បីទាញយកវីដេអូ៖**\n\n"
-            f"1️⃣ ចុចប៊ូតុង **👁️ មើលពាណិជ្ជកម្ម (៥ វិនាទី)** ដើម្បីមើលពាណិជ្ជកម្ម\n"
-            f"2️⃣ បន្ទាប់ពីមើលរួច ត្រលប់មកវិញហើយចុច **✅ រួចរាល់ - ទាញយកវីដេអូ**\n\n"
+            f"1️⃣ ចុចប៊ូតុង **👁️ មើលពាណិជ្ជកម្ម (១០ វិនាទី)**\n"
+            f"2️⃣ រង់ចាំ ១០ វិនាទី\n"
+            f"3️⃣ ចុច **✅ រួចរាល់ - ទាញយកវីដេអូ**\n\n"
+            f"⚠️ *អ្នកត្រូវតែរង់ចាំ ១០ វិនាទី បន្ទាប់ពីផ្ញើតំណភ្ជាប់*\n"
             f"⚠️ *វីដេអូនឹងផុតកំណត់ក្នុងរយៈពេល ១ ម៉ោង*"
         ),
         chat_id=chat_id,
@@ -320,12 +324,13 @@ def handle_message(message):
 
 @bot.callback_query_handler(func=lambda call: call.data == 'check_download')
 def handle_check_download(call):
-    """Handle the check download button callback"""
+    """Handle the check download button callback with time delay verification"""
     chat_id = call.message.chat.id
     message_id = call.message.message_id
+    current_time = time.time()
     
     try:
-        logger.info(f"✅ Check download clicked for chat_id: {chat_id}")
+        logger.info(f"✅ Check download clicked for chat_id: {chat_id} at {current_time}")
         
         # Retrieve video data from storage using chat_id
         video_data = user_video_storage.get(chat_id)
@@ -347,7 +352,43 @@ def handle_check_download(call):
             )
             return
         
-        # Answer callback query to remove loading state
+        # Calculate time difference since video was requested
+        time_diff = current_time - video_data['timestamp']
+        required_wait = 10  # 10 seconds required wait time
+        
+        logger.info(f"⏱️ Time difference for chat {chat_id}: {time_diff:.2f} seconds")
+        
+        # Check if user has waited long enough
+        if time_diff < required_wait:
+            # Not enough time passed - show warning
+            remaining_time = int(required_wait - time_diff) + 1
+            
+            bot.answer_callback_query(
+                call.id,
+                text=f"⚠️ សូមរង់ចាំ {remaining_time} វិនាទីទៀត មុនពេលទាញយក!",
+                show_alert=True
+            )
+            
+            # Optional: Update message to remind user
+            bot.edit_message_text(
+                text=(
+                    f"✅ **រកឃើញវីដេអូហើយ!**\n\n"
+                    f"📝 **ចំណងជើង:** {video_data['video_info']['description']}\n"
+                    f"👤 **អ្នកបង្ហោះ:** {video_data['video_info']['author']}\n\n"
+                    f"⏳ **សូមរង់ចាំ {remaining_time} វិនាទីទៀត...**\n\n"
+                    f"1️⃣ ចុចប៊ូតុង **👁️ មើលពាណិជ្ជកម្ម (១០ វិនាទី)**\n"
+                    f"2️⃣ រង់ចាំ ១០ វិនាទី\n"
+                    f"3️⃣ ចុច **✅ រួចរាល់ - ទាញយកវីដេអូ** ម្តងទៀត\n\n"
+                    f"⏱️ **ពេលវេលាដែលបានរង់ចាំ:** {time_diff:.0f}/{required_wait} វិនាទី"
+                ),
+                chat_id=chat_id,
+                message_id=message_id,
+                reply_markup=call.message.reply_markup,  # Keep the same buttons
+                parse_mode='Markdown'
+            )
+            return
+        
+        # Sufficient time has passed - proceed with download
         bot.answer_callback_query(
             call.id,
             text="កំពុងដំណើរការ... សូមរង់ចាំ",
@@ -390,8 +431,9 @@ def handle_check_download(call):
                 parse_mode='Markdown'
             )
             
-            # Clean up storage (optional - keep for history or remove)
-            # del user_video_storage[chat_id]
+            # Clean up storage (optional - remove after successful download)
+            del user_video_storage[chat_id]
+            logger.info(f"🗑️ Removed video data for chat_id: {chat_id}")
             
         else:
             # Failed to send
@@ -427,6 +469,7 @@ if __name__ == '__main__':
     logger.info(f"📡 Webhook URL: {DOMAIN}/webhook")
     logger.info(f"🔍 Health check: {DOMAIN}/health")
     logger.info(f"📦 Adsterra Link configured")
+    logger.info(f"⏱️ Required wait time: 10 seconds")
     
     # Remove webhook for local testing
     bot.remove_webhook()
