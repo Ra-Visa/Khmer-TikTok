@@ -365,7 +365,7 @@ def send_welcome(message):
     chat_id = message.chat.id
     
     # Welcome image URL
-    photo_url = "https://i.postimg.cc/DyHC33W1/Picsart-26-02-27-20-55-55-684.png"
+    photo_url = "https://i.ibb.co/d89kyw5/IMG-20260303-144521-941.jpg"
     
     # Styled caption with bold text
     caption = (
