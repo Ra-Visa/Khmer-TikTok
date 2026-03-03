@@ -6,10 +6,10 @@ import logging
 import re
 import os
 import time
+import html
 from datetime import datetime
 from urllib.parse import quote, unquote
 from queue import Queue
-from functools import wraps
 import sys
 
 # ==================== CONFIGURATION ====================
@@ -33,7 +33,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ==================== THREAD-SAFE STORAGE ====================
-# Using dictionary with locks for thread safety
 from threading import Lock
 
 class ThreadSafeStorage:
@@ -88,6 +87,12 @@ def extract_tiktok_url(text):
             return match.group(0)
     
     return None
+
+def safe_text(text):
+    """Escape special characters for Telegram HTML parsing"""
+    if text is None:
+        return ""
+    return html.escape(str(text))
 
 def download_tiktok_video(tiktok_url, timeout=60):
     """
@@ -162,8 +167,8 @@ def download_tiktok_video(tiktok_url, timeout=60):
             'success': True,
             'video_content': video_content,
             'video_url': video_url,
-            'description': video_data.get('title', 'TikTok Video')[:100],
-            'author': video_data.get('author', {}).get('nickname', 'Unknown'),
+            'description': safe_text(video_data.get('title', 'TikTok Video')[:100]),
+            'author': safe_text(video_data.get('author', {}).get('nickname', 'Unknown')),
             'duration': video_data.get('duration', 0),
             'cover': video_data.get('cover', '')
         }
@@ -283,43 +288,44 @@ class VideoDownloadWorker:
                 )
                 markup.add(ad_button, check_button)
                 
-                # Update message
+                # Update message - NO parse_mode
                 bot.edit_message_text(
                     text=(
-                        f"✅ **រកឃើញវីដេអូហើយ!**\n\n"
-                        f"📝 **ចំណងជើង:** {result['description']}\n"
-                        f"👤 **អ្នកបង្ហោះ:** {result['author']}\n"
-                        f"⏱️ **រយៈពេល:** {result.get('duration', 0)}s\n\n"
-                        f"**ដើម្បីទាញយកវីដេអូ៖**\n\n"
-                        f"1️⃣ ចុចប៊ូតុង 👁️ **មើលពាណិជ្ជកម្ម**\n"
+                        f"✅ រកឃើញវីដេអូហើយ!\n\n"
+                        f"📝 ចំណងជើង: {result['description']}\n"
+                        f"👤 អ្នកបង្ហោះ: {result['author']}\n"
+                        f"⏱️ រយៈពេល: {result.get('duration', 0)}s\n\n"
+                        f"ដើម្បីទាញយកវីដេអូ៖\n\n"
+                        f"1️⃣ ចុចប៊ូតុង 👁️ មើលពាណិជ្ជកម្ម\n"
                         f"2️⃣ រង់ចាំ ១០ វិនាទី\n"
-                        f"3️⃣ ចុច ✅ **រួចរាល់ - ទាញយកវីដេអូ**\n\n"
-                        f"⚠️ *អ្នកត្រូវរង់ចាំ ១០ វិនាទី មុនពេលទាញយក*"
+                        f"3️⃣ ចុច ✅ រួចរាល់ - ទាញយកវីដេអូ\n\n"
+                        f"⚠️ អ្នកត្រូវរង់ចាំ ១០ វិនាទី មុនពេលទាញយក"
                     ),
                     chat_id=chat_id,
                     message_id=message_id,
-                    reply_markup=markup,
-                    parse_mode='Markdown'
+                    reply_markup=markup
                 )
                 
             else:
-                # Handle error
+                # Handle error - NO parse_mode
                 bot.edit_message_text(
-                    f"❌ **កំហុស:** {result['error']}\n\n"
-                    f"សូមព្យាយាមម្តងទៀត ឬប្រើវីដេអូផ្សេង។",
+                    text=(
+                        f"❌ កំហុស: {result['error']}\n\n"
+                        f"សូមព្យាយាមម្តងទៀត ឬប្រើវីដេអូផ្សេង។"
+                    ),
                     chat_id=chat_id,
-                    message_id=message_id,
-                    parse_mode='Markdown'
+                    message_id=message_id
                 )
                 
         except Exception as e:
             logger.error(f"Background processing error: {e}")
             bot.edit_message_text(
-                f"❌ **កំហុសប្រព័ន្ធ:** {str(e)}\n\n"
-                f"សូមព្យាយាមម្តងទៀត។",
+                text=(
+                    f"❌ កំហុសប្រព័ន្ធ: {str(e)}\n\n"
+                    f"សូមព្យាយាមម្តងទៀត។"
+                ),
                 chat_id=chat_id,
-                message_id=message_id,
-                parse_mode='Markdown'
+                message_id=message_id
             )
     
     def add_task(self, chat_id, message_id, tiktok_url, processing_msg):
@@ -376,29 +382,25 @@ def webhook():
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    """Welcome message handler"""
-    welcome_text = """
-🎥 **សូមស្វាគមន៍មកកាន់ TikTok Video Downloader Bot!**
-
-**📱 របៀបប្រើប្រាស់:**
-1️⃣ ផ្ញើតំណភ្ជាប់ TikTok មកកាន់ bot
-2️⃣ រង់ចាំបន្តិច (ប្រព័ន្ធកំពុងដំណើរការ)
-3️⃣ ចុចប៊ូតុង 👁️ **មើលពាណិជ្ជកម្ម** 
-4️⃣ រង់ចាំ ១០ វិនាទី
-5️⃣ ចុច ✅ **រួចរាល់ - ទាញយកវីដេអូ**
-
-**✨ លក្ខណៈពិសេស:**
-• គ្មានស្លាកសញ្ញា TikTok
-• គុណភាព HD
-• គាំទ្រវីដេអូវែង (រហូតដល់ ៣ នាទី)
-• ដំណើរការផ្ទៃខាងក្រោយ
-
-**🔗 ឧទាហរណ៍តំណភ្ជាប់:**
-`https://www.tiktok.com/@user/video/123456789`
-
-ផ្ញើតំណភ្ជាប់ TikTok មកខ្ញុំដើម្បីចាប់ផ្តើម! 🚀
-    """
-    bot.reply_to(message, welcome_text, parse_mode='Markdown')
+    """Welcome message handler - NO parse_mode"""
+    welcome_text = (
+        "🎥 សូមស្វាគមន៍មកកាន់ TikTok Video Downloader Bot!\n\n"
+        "📱 របៀបប្រើប្រាស់:\n"
+        "1️⃣ ផ្ញើតំណភ្ជាប់ TikTok មកកាន់ bot\n"
+        "2️⃣ រង់ចាំបន្តិច (ប្រព័ន្ធកំពុងដំណើរការ)\n"
+        "3️⃣ ចុចប៊ូតុង 👁️ មើលពាណិជ្ជកម្ម\n"
+        "4️⃣ រង់ចាំ ១០ វិនាទី\n"
+        "5️⃣ ចុច ✅ រួចរាល់ - ទាញយកវីដេអូ\n\n"
+        "✨ លក្ខណៈពិសេស:\n"
+        "• គ្មានស្លាកសញ្ញា TikTok\n"
+        "• គុណភាព HD\n"
+        "• គាំទ្រវីដេអូវែង (រហូតដល់ ៣ នាទី)\n"
+        "• ដំណើរការផ្ទៃខាងក្រោយ\n\n"
+        "🔗 ឧទាហរណ៍តំណភ្ជាប់:\n"
+        "https://www.tiktok.com/@user/video/123456789\n\n"
+        "ផ្ញើតំណភ្ជាប់ TikTok មកខ្ញុំដើម្បីចាប់ផ្តើម! 🚀"
+    )
+    bot.reply_to(message, welcome_text)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
@@ -419,18 +421,16 @@ def handle_message(message):
     if not tiktok_url:
         bot.reply_to(
             message, 
-            "❌ **សូមផ្ញើតំណភ្ជាប់ TikTok ត្រឹមត្រូវ។**\n\n"
-            "ឧទាហរណ៍: `https://www.tiktok.com/@user/video/123456789`",
-            parse_mode='Markdown'
+            "❌ សូមផ្ញើតំណភ្ជាប់ TikTok ត្រឹមត្រូវ។\n\n"
+            "ឧទាហរណ៍: https://www.tiktok.com/@user/video/123456789"
         )
         return
     
-    # Send processing message
+    # Send processing message - NO parse_mode
     processing_msg = bot.reply_to(
         message, 
-        "🔄 **កំពុងដំណើរការតំណភ្ជាប់របស់អ្នក...**\n\n"
-        "⏱️ រង់ចាំបន្តិច (អាចចំណាយពេលដល់ទៅ ៦០ វិនាទី សម្រាប់វីដេអូវែង)",
-        parse_mode='Markdown'
+        "🔄 កំពុងដំណើរការតំណភ្ជាប់របស់អ្នក...\n\n"
+        "⏱️ រង់ចាំបន្តិច (អាចចំណាយពេលដល់ទៅ ៦០ វិនាទី សម្រាប់វីដេអូវែង)"
     )
     
     # Add to background queue
@@ -483,46 +483,45 @@ def handle_check_download(call):
             show_alert=False
         )
         
-        # Update message
+        # Update message - NO parse_mode
         bot.edit_message_text(
-            text="⏳ **កំពុងផ្ញើវីដេអូ...**\n\nសូមរង់ចាំបន្តិច...",
+            text="⏳ កំពុងផ្ញើវីដេអូ...\n\nសូមរង់ចាំបន្តិច...",
             chat_id=chat_id,
-            message_id=message_id,
-            parse_mode='Markdown'
+            message_id=message_id
         )
         
-        # Create caption
+        # Create caption - video_info fields are already escaped
         video_info = video_data['video_info']
         caption = (
-            f"🎥 **TikTok Video Downloaded**\n\n"
-            f"📝 **ចំណងជើង:** {video_info['description']}\n"
-            f"👤 **អ្នកបង្ហោះ:** {video_info['author']}\n"
-            f"⏱️ **រយៈពេល:** {video_info.get('duration', 0)}s\n\n"
+            f"🎥 TikTok Video Downloaded\n\n"
+            f"📝 ចំណងជើង: {video_info['description']}\n"
+            f"👤 អ្នកបង្ហោះ: {video_info['author']}\n"
+            f"⏱️ រយៈពេល: {video_info.get('duration', 0)}s\n\n"
             f"✅ ទាញយកដោយជោគជ័យ!"
         )
         
         # Send video
         if send_video_to_chat(chat_id, video_data['video_content'], caption):
+            # Success - NO parse_mode
             bot.edit_message_text(
                 text=(
-                    f"✅ **វីដេអូត្រូវបានផ្ញើដោយជោគជ័យ!** 🎉\n\n"
-                    f"📝 **ចំណងជើង:** {video_info['description']}\n\n"
+                    f"✅ វីដេអូត្រូវបានផ្ញើដោយជោគជ័យ! 🎉\n\n"
+                    f"📝 ចំណងជើង: {video_info['description']}\n\n"
                     f"ផ្ញើតំណភ្ជាប់ថ្មីដើម្បីទាញយកបន្ត!"
                 ),
                 chat_id=chat_id,
-                message_id=message_id,
-                parse_mode='Markdown'
+                message_id=message_id
             )
             
             # Clean up
             user_video_storage.delete(chat_id)
             
         else:
+            # Failed - NO parse_mode
             bot.edit_message_text(
-                text="❌ **បរាជ័យក្នុងការផ្ញើវីដេអូ**\n\nសូមព្យាយាមម្តងទៀត។",
+                text="❌ បរាជ័យក្នុងការផ្ញើវីដេអូ\n\nសូមព្យាយាមម្តងទៀត។",
                 chat_id=chat_id,
-                message_id=message_id,
-                parse_mode='Markdown'
+                message_id=message_id
             )
             
     except Exception as e:
@@ -547,6 +546,7 @@ if __name__ == '__main__':
     logger.info(f"📡 Webhook URL: {DOMAIN}/webhook")
     logger.info(f"⏱️ Video timeout: 60 seconds")
     logger.info(f"👥 Worker threads: 3")
+    logger.info("✅ parse_mode='Markdown' removed from all messages")
     
     # Remove webhook for local testing
     bot.remove_webhook()
