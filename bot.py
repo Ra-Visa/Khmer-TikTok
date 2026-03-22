@@ -16,7 +16,7 @@ BOT_TOKEN = "8423380479:AAFS58QONQZzZnLGxy3q1_LBg4IfmOGfSzo"
 RAPIDAPI_KEY = "8e126a962emshf6305bb2fe26993p14eeecjsn3438579f250c"
 RAPIDAPI_HOST = "youtube-mp36.p.rapidapi.com"
 ADSTERRA_LINK = "https://www.effectivegatecpm.com/hmc3n4g9?key=633ca2e22b9bf9e4fd318f9df03b032a"
-DOMAIN = "https://khmer-tiktok.onrender.com"  # Your Render domain
+DOMAIN = "https://khmer-tiktok-pe64.onrender.com"  # Your Render domain
 PORT = int(os.environ.get('PORT', 5000))
 REQUIRED_WAIT_TIME = 10  # seconds
 MAX_AUDIO_SIZE = 50 * 1024 * 1024  # 50MB Telegram limit for audio files
